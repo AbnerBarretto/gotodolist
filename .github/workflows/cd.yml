@@ -1,14 +1,10 @@
-# Copiar para o SEU FORK em: .github/workflows/cd.yml  (na branch main!)
-# Secrets necessÃ¡rios (Settings > Secrets and variables > Actions):
-#   PORTAINER_WEBHOOK_URL  -> URL do webhook da stack gotodolist no Portainer
 name: CD
 
 on:
   workflow_run:
-    # Tem que ser IGUAL ao "name:" do workflow de release do fork.
-    # No gotodolist ele se chama "Publish Docker Images and Release" (nÃ£o "Release", como no lab6.md).
     workflows: ["Publish Docker Images and Release"]
-    types: [completed]
+    types:
+      - completed
   workflow_dispatch:
 
 jobs:
@@ -18,27 +14,18 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
-      - name: Aguardar imagens no GHCR
-        run: |
-          OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
-          for img in gotodolist-api gotodolist-frontend; do
-            for i in $(seq 1 12); do
-              if docker manifest inspect "ghcr.io/${OWNER}/${img}:latest" >/dev/null 2>&1; then
-                echo "âœ… ghcr.io/${OWNER}/${img}:latest disponÃ­vel"; break
-              fi
-              echo "â³ aguardando ${img}... ($i/12)"; sleep 10
-            done
-          done
-
       - name: Chamar webhook do Portainer
         env:
           WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK_URL }}
         run: |
-          if [ -z "$WEBHOOK" ]; then echo "âŒ secret PORTAINER_WEBHOOK_URL nÃ£o definido"; exit 1; fi
-          # -k: o Portainer usa certificado auto-assinado na 9443
+          if [ -z "$WEBHOOK" ]; then
+            echo "Erro: secret PORTAINER_WEBHOOK_URL nao definido"
+            exit 1
+          fi
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST -k --max-time 60 "$WEBHOOK")
           echo "HTTP Status: $HTTP_STATUS"
           if [ "$HTTP_STATUS" -ne 204 ] && [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "âŒ Webhook retornou $HTTP_STATUS (esperado: 204)"; exit 1
+            echo "Erro: Webhook retornou $HTTP_STATUS (esperado: 204)"
+            exit 1
           fi
-          echo "âœ… Portainer estÃ¡ re-deployando a stack"
+          echo "Sucesso: Webhook chamado - Portainer esta atualizando a stack"
